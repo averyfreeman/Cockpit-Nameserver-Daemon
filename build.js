@@ -151,16 +151,28 @@ try {
                 bundledPackages.add(match[1]);
         }
 
-        // Look up versions from package-lock.json and output simple format
-        const packageLock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
-        const deps = [];
-        for (const pkgName of Array.from(bundledPackages).sort()) {
-            const lockKey = `node_modules/${pkgName}`;
-            const pkgInfo = packageLock.packages?.[lockKey];
-            if (pkgInfo?.version)
-                deps.push(`${pkgName} ${pkgInfo.version}`);
-            else
-                console.error(`Warning: Could not find version for ${pkgName}`);
+        let getRuntimeNpmModules;
+        try {
+            ({ getRuntimeNpmModules } = await import('../../tools/runtime-npm-modules.mjs'));
+        } catch (error) {
+            if (error.code !== 'ERR_MODULE_NOT_FOUND') throw error;
+        }
+
+        let deps;
+        if (getRuntimeNpmModules) {
+            deps = getRuntimeNpmModules(result.metafile);
+        } else {
+            // Standalone checkouts keep their npm lockfile fallback.
+            const packageLock = JSON.parse(fs.readFileSync('package-lock.json', 'utf8'));
+            deps = [];
+            for (const pkgName of Array.from(bundledPackages).sort()) {
+                const lockKey = `node_modules/${pkgName}`;
+                const pkgInfo = packageLock.packages?.[lockKey];
+                if (pkgInfo?.version)
+                    deps.push(`${pkgName} ${pkgInfo.version}`);
+                else
+                    console.error(`Warning: Could not find version for ${pkgName}`);
+            }
         }
         fs.writeFileSync('runtime-npm-modules.txt', deps.join('\n') + '\n');
     }
